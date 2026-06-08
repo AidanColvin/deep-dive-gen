@@ -4,8 +4,9 @@ import { useEffect } from "react";
 
 /**
  * first-load intro animation:
- *   1. "Deep Dive" appears, letters in alternating blue/purple shades
- *   2. stacks of multicolored books fall letter-by-letter, burying the word
+ *   1. "Deep Dive" appears in black on a white background
+ *   2. stacks of palette-colored books fall letter-by-letter, each stack a
+ *      different height, burying the word
  *   3. a sheet of paper slips from under the final stack and falls away
  *   4. onDone() is called, revealing the app
  */
@@ -13,42 +14,44 @@ import { useEffect } from "react";
 const WORD = "Deep Dive";
 const SLOTS = Array.from(WORD);
 
-const BLUES = ["#60a5fa", "#3b82f6", "#38bdf8", "#818cf8"];
-const PURPLES = ["#a78bfa", "#c084fc", "#8b5cf6", "#a855f7"];
-const BOOK_COLORS = [
-  "#ef4444", "#f59e0b", "#22c55e", "#3b82f6", "#a855f7", "#ec4899",
-  "#14b8a6", "#f97316", "#84cc16", "#06b6d4", "#eab308", "#8b5cf6",
-];
+// the requested palette
+const BOOK_COLORS = ["#983628", "#34623F", "#0B0500", "#A9927D", "#B3B7EE"];
 
-const BOOKS_PER = 3;
-const BOOK_START = 800; // ms before the first book falls
-const BOOK_STAGGER = 80; // ms between books
-const BOOK_FALL = 480; // ms each book takes to land
+// distinct stack height per letter (D e e p · D i v e)
+const STACK_HEIGHTS = [3, 5, 2, 6, 4, 5, 3, 2];
+
+const LETTER_INK = "#191613";
+const BOOK_START = 700; // ms before the first book falls
+const BOOK_STAGGER = 62; // ms between books
+const BOOK_FALL = 470; // ms each book takes to land
 const PAPER_FALL = 1200; // ms for the paper to fall away
 
-function letterColor(i: number): string {
-  return i % 2 === 0
-    ? BLUES[Math.floor(i / 2) % BLUES.length]
-    : PURPLES[Math.floor((i - 1) / 2) % PURPLES.length];
-}
-
 export default function IntroSplash({ onDone }: { onDone: () => void }) {
-  // indices of real letters (skip the space)
   const letterSlots = SLOTS.map((c, i) => (c === " " ? -1 : i)).filter((i) => i >= 0);
 
-  const books: { slot: number; k: number; color: string; delay: number }[] = [];
+  const books: {
+    slot: number;
+    k: number;
+    color: string;
+    delay: number;
+    jx: string;
+    rot: string;
+  }[] = [];
   let g = 0;
-  for (const slot of letterSlots) {
-    for (let k = 0; k < BOOKS_PER; k++) {
+  letterSlots.forEach((slot, li) => {
+    const count = STACK_HEIGHTS[li % STACK_HEIGHTS.length];
+    for (let k = 0; k < count; k++) {
       books.push({
         slot,
         k,
         color: BOOK_COLORS[g % BOOK_COLORS.length],
         delay: BOOK_START + g * BOOK_STAGGER,
+        jx: `${((((g * 7) % 5) - 2) * 0.018).toFixed(3)}em`,
+        rot: `${((g * 11) % 7) - 3}deg`,
       });
       g++;
     }
-  }
+  });
 
   const lastBookEnd = BOOK_START + (g - 1) * BOOK_STAGGER + BOOK_FALL;
   const paperDelay = lastBookEnd - 120;
@@ -75,12 +78,12 @@ export default function IntroSplash({ onDone }: { onDone: () => void }) {
             className="intro-letter"
             style={
               {
-                color: ch === " " ? "transparent" : letterColor(i),
+                color: ch === " " ? "transparent" : LETTER_INK,
                 animationDelay: `${i * 50}ms`,
               } as React.CSSProperties
             }
           >
-            {ch === " " ? " " : ch}
+            {ch === " " ? " " : ch}
           </span>
         ))}
 
@@ -92,6 +95,8 @@ export default function IntroSplash({ onDone }: { onDone: () => void }) {
               {
                 "--i": b.slot,
                 "--restY": `${(b.k * 0.2).toFixed(2)}em`,
+                "--jx": b.jx,
+                "--rot": b.rot,
                 background: b.color,
                 animationDelay: `${b.delay}ms`,
               } as React.CSSProperties

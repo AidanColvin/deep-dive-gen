@@ -46,7 +46,7 @@ a {
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  background: radial-gradient(circle at 50% 38%, #1d1d44 0%, #0a0a16 72%);
+  background: #ffffff;
   cursor: pointer;
 }
 .intro-word {
@@ -66,7 +66,7 @@ a {
   opacity: 0;
   transform: translateY(0.25em) scale(0.9);
   animation: introLetterIn 0.5s cubic-bezier(0.2, 1.5, 0.4, 1) forwards;
-  text-shadow: 0 0 22px currentColor;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
 }
 @keyframes introLetterIn {
   to {
@@ -76,18 +76,18 @@ a {
 }
 .intro-book {
   position: absolute;
-  left: calc(var(--i) * 0.7em);
+  left: calc(var(--i) * 0.7em + var(--jx, 0em));
   bottom: 0.06em;
   width: 0.7em;
   height: 0.2em;
   border-radius: 0.03em;
   box-shadow:
-    inset 0 0.025em 0 rgba(255, 255, 255, 0.5),
-    inset 0 -0.02em 0 rgba(0, 0, 0, 0.25),
-    0 0.02em 0.05em rgba(0, 0, 0, 0.4);
+    inset 0 0.025em 0 rgba(255, 255, 255, 0.4),
+    inset 0 -0.02em 0 rgba(0, 0, 0, 0.3),
+    0 0.02em 0.06em rgba(0, 0, 0, 0.28);
   opacity: 0;
-  transform: translateY(-4.2em);
-  animation: introBookFall 0.48s cubic-bezier(0.45, 1.5, 0.55, 1) forwards;
+  transform: translateY(-4.2em) rotate(var(--rot, 0deg));
+  animation: introBookFall 0.47s cubic-bezier(0.45, 1.5, 0.55, 1) forwards;
 }
 .intro-book::after {
   /* the page block peeking from the right edge of the spine */
@@ -103,17 +103,17 @@ a {
 @keyframes introBookFall {
   0% {
     opacity: 0;
-    transform: translateY(-4.2em);
+    transform: translateY(-4.2em) rotate(var(--rot, 0deg));
   }
   12% {
     opacity: 1;
   }
   76% {
-    transform: translateY(calc(-1 * var(--restY) - 0.14em));
+    transform: translateY(calc(-1 * var(--restY) - 0.14em)) rotate(var(--rot, 0deg));
   }
   100% {
     opacity: 1;
-    transform: translateY(calc(-1 * var(--restY)));
+    transform: translateY(calc(-1 * var(--restY))) rotate(var(--rot, 0deg));
   }
 }
 .intro-paper {
@@ -129,8 +129,8 @@ a {
     transparent 0 0.1em,
     rgba(40, 40, 70, 0.13) 0.1em 0.108em
   );
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  box-shadow: 0 0.03em 0.12em rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(0, 0, 0, 0.3);
+  box-shadow: 0 0.06em 0.2em rgba(0, 0, 0, 0.22);
   opacity: 0;
   transform: translateY(0) rotate(0deg);
   animation: introPaperFall 1.2s ease-in forwards;
@@ -159,9 +159,9 @@ a {
   position: absolute;
   right: 22px;
   bottom: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  background: rgba(255, 255, 255, 0.06);
-  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.55);
   font-size: 13px;
   font-weight: 500;
   padding: 7px 14px;
@@ -169,8 +169,8 @@ a {
   backdrop-filter: blur(4px);
 }
 .intro-skip:hover {
-  color: #fff;
-  border-color: rgba(255, 255, 255, 0.5);
+  color: #111;
+  border-color: rgba(0, 0, 0, 0.4);
 }
 @media (prefers-reduced-motion: reduce) {
   .intro {

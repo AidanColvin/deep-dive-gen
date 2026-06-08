@@ -16,6 +16,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Consumer Technology",
     tagline: "The integrated hardware-services ecosystem at $416B revenue.",
     accent: "#0071e3",
+    domain: "apple.com",
     updated: "June 2026",
   },
   {
@@ -28,6 +29,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Accelerated Computing",
     tagline: "The AI compute platform powering the data-center buildout.",
     accent: "#76b900",
+    domain: "nvidia.com",
     updated: "June 2026",
   },
   {
@@ -40,6 +42,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Software & Cloud",
     tagline: "Azure, Copilot, and the enterprise AI distribution machine.",
     accent: "#0078d4",
+    domain: "microsoft.com",
     updated: "June 2026",
   },
   {
@@ -52,6 +55,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Internet & AI",
     tagline: "Search economics funding a full-stack AI and cloud push.",
     accent: "#4285f4",
+    domain: "google.com",
     updated: "June 2026",
   },
   {
@@ -64,6 +68,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Cloud Infrastructure",
     tagline: "The $129B cloud segment that funds Amazon's operating income.",
     accent: "#ff9900",
+    domain: "aws.amazon.com",
     updated: "June 2026",
   },
   {
@@ -75,6 +80,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Frontier AI",
     tagline: "Claude, enterprise safety positioning, and a ~$1T valuation.",
     accent: "#d97757",
+    domain: "anthropic.com",
     updated: "June 2026",
   },
   {
@@ -86,6 +92,7 @@ export const CURATED: CuratedMeta[] = [
     sector: "Frontier AI",
     tagline: "ChatGPT scale, an $852B valuation, and a filed S-1.",
     accent: "#10a37f",
+    domain: "openai.com",
     updated: "June 2026",
   },
 ];

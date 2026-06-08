@@ -288,6 +288,41 @@ a {
   padding-bottom: 22px;
   margin-bottom: 8px;
 }
+.report-head-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.report-head-title {
+  min-width: 0;
+}
+.company-logo {
+  flex: 0 0 auto;
+  width: 76px;
+  height: 76px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: 0 10px 30px -18px rgba(0, 0, 0, 0.45);
+}
+.company-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  padding: 14px;
+}
+.company-logo.monogram {
+  color: #fff;
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 600;
+  line-height: 1;
+}
 .report-eyebrow {
   font-family: var(--mono);
   font-size: 12px;
@@ -474,6 +509,14 @@ a {
   }
   .topsearch input {
     width: 150px;
+  }
+  .company-logo {
+    width: 58px;
+    height: 58px;
+    border-radius: 14px;
+  }
+  .company-logo.monogram {
+    font-size: 26px;
   }
 }
 

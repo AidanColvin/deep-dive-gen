@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import MarkdownArticle, { slugify } from "./components/MarkdownArticle";
+import CompanyLogo from "./components/CompanyLogo";
 import { CURATED, findCurated } from "@/lib/registry";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -18,6 +19,7 @@ export default function Home() {
   const [query, setQuery] = useState("");
   const [company, setCompany] = useState("");
   const [accent, setAccent] = useState(DEFAULT_ACCENT);
+  const [logoDomain, setLogoDomain] = useState<string | undefined>(undefined);
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [activeId, setActiveId] = useState("");
@@ -32,6 +34,7 @@ export default function Home() {
     const curated = findCurated(trimmed);
     setCompany(curated ? curated.name : titleCase(trimmed));
     setAccent(curated ? curated.accent : DEFAULT_ACCENT);
+    setLogoDomain(curated ? curated.domain : guessDomain(trimmed));
     setQuery(curated ? curated.name : trimmed);
     setMarkdown("");
     setStatus("loading");
@@ -116,6 +119,7 @@ export default function Home() {
     setCompany("");
     setQuery("");
     setAccent(DEFAULT_ACCENT);
+    setLogoDomain(undefined);
   }
 
   /* ------------------------------- idle / hero ------------------------------- */
@@ -239,8 +243,18 @@ export default function Home() {
 
         <div className="content" ref={articleRef}>
           <div className="report-head">
-            <div className="report-eyebrow">Company Deep Dive</div>
-            <h1 className="report-title">{company}</h1>
+            <div className="report-head-top">
+              <div className="report-head-title">
+                <div className="report-eyebrow">Company Deep Dive</div>
+                <h1 className="report-title">{company}</h1>
+              </div>
+              <CompanyLogo
+                key={logoDomain || company}
+                name={company}
+                domain={logoDomain}
+                accent={accent}
+              />
+            </div>
             <div className="export">
               <button onClick={copyMarkdown} disabled={isBusy}>
                 Copy Markdown
@@ -276,4 +290,21 @@ function titleCase(s: string): string {
     .split(/\s+/)
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+/**
+ * given a company name or query
+ * return a best-guess web domain for logo lookup (e.g. "Tesla" -> "tesla.com").
+ * logo fetching degrades gracefully to a monogram if this guess is wrong.
+ */
+function guessDomain(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(
+      /,?\s+(inc|incorporated|corp|corporation|co|company|plc|ltd|limited|holdings|group|llc|sa|ag|nv)\.?$/g,
+      "",
+    )
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]/g, "");
+  return base ? `${base}.com` : "";
 }

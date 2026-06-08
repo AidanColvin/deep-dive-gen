@@ -14,6 +14,7 @@ export interface CuratedMeta {
   sector: string;
   tagline: string;
   accent: string; // hex color used as the report accent
+  domain: string; // primary web domain, used to fetch the company logo
   updated: string; // human display date
 }
 

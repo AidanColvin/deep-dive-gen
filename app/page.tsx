@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import MarkdownArticle, { slugify } from "./components/MarkdownArticle";
 import CompanyLogo from "./components/CompanyLogo";
+import IntroSplash from "./components/IntroSplash";
 import { CURATED, findCurated } from "@/lib/registry";
 
 type Status = "idle" | "loading" | "streaming" | "done" | "error";
@@ -23,7 +24,18 @@ export default function Home() {
   const [markdown, setMarkdown] = useState("");
   const [status, setStatus] = useState<Status>("idle");
   const [activeId, setActiveId] = useState("");
+  const [intro, setIntro] = useState(true);
   const articleRef = useRef<HTMLDivElement>(null);
+
+  // play the intro once per session; respect reduced-motion
+  useEffect(() => {
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || sessionStorage.getItem("introSeen")) {
+      setIntro(false);
+      return;
+    }
+    sessionStorage.setItem("introSeen", "1");
+  }, []);
 
   const isBusy = status === "loading" || status === "streaming";
 
@@ -126,6 +138,7 @@ export default function Home() {
   if (status === "idle") {
     return (
       <main className="hero">
+        {intro && <IntroSplash onDone={() => setIntro(false)} />}
         <div className="hero-inner">
           <div className="kicker">FREE · NO API KEYS · SOURCE-GROUNDED</div>
           <h1 className="hero-title">
@@ -202,6 +215,7 @@ export default function Home() {
   /* ------------------------------- report view ------------------------------- */
   return (
     <main className="app" style={{ ["--accent" as any]: accent }}>
+      {intro && <IntroSplash onDone={() => setIntro(false)} />}
       <header className="topbar">
         <button className="brand" onClick={reset}>
           ◆ Deep Dive

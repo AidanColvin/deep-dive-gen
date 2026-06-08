@@ -30,3 +30,23 @@ export async function getJson<T>(url: string, opts: GetOpts = {}): Promise<T | n
     return null;
   }
 }
+
+/**
+ * given a url
+ * return the raw response body as text, or null on any failure
+ */
+export async function getText(url: string, opts: GetOpts = {}): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": USER_AGENT,
+        Accept: opts.accept ?? "text/html,*/*",
+      },
+      next: opts.revalidate ? { revalidate: opts.revalidate } : undefined,
+    });
+    if (!res.ok) return null;
+    return await res.text();
+  } catch {
+    return null;
+  }
+}

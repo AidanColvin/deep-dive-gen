@@ -58,3 +58,21 @@ export interface ResearchSignal {
   count: number;
   topWorks: { title: string; year?: number; venue?: string }[];
 }
+
+export interface FilingRef {
+  form: string;
+  date: string;
+  accession: string;
+  primaryDoc: string;
+}
+
+export interface TenKSections {
+  url: string;
+  fiscalYear?: string;
+  business?: string;
+  competition?: string;
+  risks?: string;
+  riskHeadlines: string[];
+  mda?: string;
+  employees?: string;
+}

@@ -5,6 +5,7 @@
 
 import { getJson, getText } from "./http";
 import type {
+  Executive,
   Financials,
   FilingRef,
   SecProfile,
@@ -200,7 +201,122 @@ export async function fetch10KSections(
     riskHeadlines: riskSeg ? riskHeadlines(riskSeg) : [],
     mda: mdaSeg ? excerpt(mdaSeg, 1100) : undefined,
     employees: extractEmployees(text),
+    executives: extractExecutives(text),
   };
+}
+
+/**
+ * given a CIK and its filing list
+ * return current executive officers parsed from recent Form 4 (insider) XML.
+ * Form 4 raw XML carries each reporting owner's name plus their officer title,
+ * which is far more reliable than parsing the 10-K's officer table.
+ */
+export async function fetchExecutives(
+  cik: string,
+  filings: FilingRef[],
+): Promise<Executive[]> {
+  const form4 = filings.filter((f) => f.form === "4").slice(0, 10);
+  if (!form4.length) return [];
+  const cikInt = parseInt(cik, 10);
+
+  const docs = await Promise.all(
+    form4.map((f) => {
+      const raw = f.primaryDoc.split("/").pop(); // strip the xsl render prefix
+      const acc = f.accession.replace(/-/g, "");
+      return getText(`https://www.sec.gov/Archives/edgar/data/${cikInt}/${acc}/${raw}`, {
+        revalidate: 86400,
+      });
+    }),
+  );
+
+  const byName = new Map<string, { title: string; rank: number }>();
+  for (const xml of docs) {
+    if (!xml || !/<isOfficer>\s*(1|true)\s*<\/isOfficer>/i.test(xml)) continue;
+    const name = xml.match(/<rptOwnerName>([^<]+)<\/rptOwnerName>/i)?.[1]?.trim();
+    const title = xml.match(/<officerTitle>([^<]+)<\/officerTitle>/i)?.[1]?.trim();
+    if (!name || !title) continue;
+    const display = reformatOwnerName(name);
+    if (!byName.has(display))
+      byName.set(display, { title: tidyTitle(title), rank: seniority(title) });
+  }
+
+  return [...byName.entries()]
+    .map(([name, v]) => ({ name, title: v.title, rank: v.rank }))
+    .sort((a, b) => a.rank - b.rank)
+    .slice(0, 6)
+    .map(({ name, title }) => ({ name, title }));
+}
+
+/**
+ * given an SEC reporting-owner name ("Last First Middle [Suffix]")
+ * return a normal "First Middle Last [Suffix]", title-cased
+ */
+function reformatOwnerName(s: string): string {
+  const parts = s.replace(/\s+/g, " ").trim().split(" ");
+  if (parts.length < 2) return titleCaseName(s);
+  let suffix = "";
+  if (/^(jr|sr|ii|iii|iv|v)\.?$/i.test(parts[parts.length - 1])) {
+    suffix = normSuffix(parts.pop() as string);
+  }
+  const lastName = parts.shift() as string;
+  const out = titleCaseName(`${parts.join(" ")} ${lastName}`);
+  return suffix ? `${out} ${suffix}` : out;
+}
+
+function titleCaseName(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/(^|[\s'’-])([a-z])/g, (_, p, c) => p + c.toUpperCase());
+}
+
+function normSuffix(s: string): string {
+  const t = s.replace(/\./g, "");
+  return /^(ii|iii|iv|v)$/i.test(t)
+    ? t.toUpperCase()
+    : t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+}
+
+/**
+ * given a raw officer title (may be ALL CAPS, all lower, or contain entities)
+ * return a tidy, consistently-cased title
+ */
+function tidyTitle(title: string): string {
+  let t = title
+    .replace(/&amp;/gi, "&")
+    .replace(/&#39;|&apos;|&rsquo;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+  const letters = t.replace(/[^a-zA-Z]/g, "");
+  const upper = (t.match(/[A-Z]/g) ?? []).length;
+  const allCaps = letters.length > 1 && upper / letters.length > 0.8;
+  const allLower = letters.length > 1 && upper === 0;
+  if (allCaps || allLower) {
+    t = t.toLowerCase().replace(/\b([a-z])/g, (c) => c.toUpperCase());
+  }
+  // restore common business acronyms (any case -> upper)
+  return t.replace(
+    /\b(ceo|cfo|coo|cto|cmo|cio|clo|cpo|cao|cso|evp|svp|vp|aws|ai)\b/gi,
+    (m) => m.toUpperCase(),
+  );
+}
+
+/**
+ * given an officer title
+ * return a sort rank (lower = more senior)
+ */
+function seniority(title: string): number {
+  const s = title.toLowerCase();
+  if (/(chief executive|ceo|chair|founder|technoking)/.test(s)) return 0;
+  if (/president/.test(s)) return 1;
+  if (/(chief financial|cfo)/.test(s)) return 2;
+  if (/(chief operating|coo)/.test(s)) return 3;
+  if (/chief/.test(s)) return 4;
+  if (/(evp|executive vice president)/.test(s)) return 5;
+  if (/(svp|senior vice president)/.test(s)) return 6;
+  return 7;
 }
 
 /* --------------------------- 10-K text helpers --------------------------- */
@@ -348,6 +464,74 @@ function extractEmployees(text: string): string | undefined {
     /(?:had|employed|approximately|of)\s+([\d,]{4,})\s+(?:full-?\s?time\s+)?(?:employees|people|persons)/i,
   );
   return m ? m[1].replace(/,/g, ",") : undefined;
+}
+
+const NAME = "[A-Z][A-Za-z.'’-]+(?:\\s+[A-Z][A-Za-z.'’-]+){1,3}";
+const EXEC_AGE = new RegExp(`^(${NAME})\\s+(\\d{2})\\s+(.{4,90})$`);
+const EXEC_COMMA = new RegExp(`^(${NAME})\\s*[,—–-]\\s*(.{4,90})$`);
+
+/**
+ * given a string
+ * return true if it reads like an executive title
+ */
+function looksLikeTitle(s: string): boolean {
+  return (
+    s.length <= 90 &&
+    /\b(chief|president|chair(man|woman)?|vice\s+president|general counsel|treasurer|secretary|officer|controller|principal)\b/i.test(
+      s,
+    )
+  );
+}
+
+/**
+ * given the full 10-K text
+ * return the executive officers (name + title) from the
+ * "Information about our Executive Officers" section, if present
+ */
+function extractExecutives(text: string): Executive[] {
+  const idx = text.search(
+    /(Information about our Executive Officers|Executive Officers of (the |our )?(Registrant|Company)|Our Executive Officers)/i,
+  );
+  if (idx < 0) return [];
+  const section = text.slice(idx, idx + 5000);
+  const lines = section.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  const out: Executive[] = [];
+  const seen = new Set<string>();
+  for (const line of lines) {
+    let name = "";
+    let title = "";
+    let m = line.match(EXEC_AGE);
+    if (m && looksLikeTitle(m[3])) {
+      name = m[1];
+      title = m[3];
+    } else {
+      m = line.match(EXEC_COMMA);
+      if (m && looksLikeTitle(m[2])) {
+        name = m[1];
+        title = m[2];
+      }
+    }
+    if (!name) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: name.replace(/\s+/g, " ").trim(), title: cleanTitle(title) });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
+/**
+ * given a raw title string
+ * return it trimmed to the title itself (drop trailing tenure/bio sentences)
+ */
+function cleanTitle(t: string): string {
+  return t
+    .split(/\s+(?:Since|since|Mr\.|Ms\.|Mrs\.|Dr\.|He |She |Prior |From |has |joined)/)[0]
+    .replace(/\s+/g, " ")
+    .replace(/[.;,]+\s*$/, "")
+    .trim();
 }
 
 // XBRL concept candidates, in priority order

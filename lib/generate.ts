@@ -14,12 +14,15 @@ import {
   fetchRecentFilings,
   findLatest10K,
   fetch10KSections,
+  fetchExecutives,
   resolveCik,
 } from "./sec";
 import { fetchWikiSummary } from "./wikipedia";
 import { fetchResearch } from "./openalex";
+import { buildLeadership } from "./leadership";
 import { usd, pct, yoy, lastN, latest, valueFor } from "./format";
 import type {
+  Executive,
   FilingRef,
   Financials,
   ResearchSignal,
@@ -43,9 +46,14 @@ export async function buildLiveReport(query: string): Promise<string> {
     fetchResearch(hit?.title ?? query),
   ]);
 
-  // the 10-K narrative depends on the filing list, so fetch it after
+  // the 10-K narrative and the insider-derived executives both depend on
+  // the filing list, so fetch them after, in parallel
   const ref = filings.length ? findLatest10K(filings) : null;
-  const tenk = hit && ref ? await fetch10KSections(hit.cik, ref) : null;
+  const [tenk, form4Execs] = await Promise.all([
+    hit && ref ? fetch10KSections(hit.cik, ref) : Promise.resolve(null),
+    hit ? fetchExecutives(hit.cik, filings) : Promise.resolve([] as Executive[]),
+  ]);
+  const execs = form4Execs.length ? form4Execs : tenk?.executives ?? [];
 
   const name = profile?.name ?? wiki?.title ?? titleCase(query);
   if (!profile && !wiki) return notFound(query);
@@ -62,9 +70,37 @@ export async function buildLiveReport(query: string): Promise<string> {
     recentFilings(filings),
     researchSection(research),
     outlook(name, financials, tenk),
+    leadership(name, execs, !!profile),
     sources(profile, wiki, research, tenk),
   ];
   return parts.join("\n");
+}
+
+const LIVE_ACCENT = "#4f46e5";
+
+function leadership(name: string, execs: Executive[], isPublic: boolean): string {
+  if (!execs.length) return "";
+  return buildLeadership(execs, {
+    accent: LIVE_ACCENT,
+    company: name,
+    companyUrl: isPublic ? `https://${guessDomain(name)}` : undefined,
+  });
+}
+
+/**
+ * given a company name
+ * return a best-guess web domain (e.g. "Ford Motor Co" -> "fordmotor.com")
+ */
+function guessDomain(name: string): string {
+  const base = name
+    .toLowerCase()
+    .replace(
+      /,?\s+(inc|incorporated|corp|corporation|co|company|plc|ltd|limited|holdings|group|llc|sa|ag|nv)\.?$/g,
+      "",
+    )
+    .replace(/&/g, "and")
+    .replace(/[^a-z0-9]/g, "");
+  return base ? `${base}.com` : "";
 }
 
 /* ------------------------------ sections ------------------------------ */

@@ -15,6 +15,7 @@ export interface CuratedMeta {
   tagline: string;
   accent: string; // hex color used as the report accent
   domain: string; // primary web domain, used to fetch the company logo
+  leaders?: Executive[]; // hand-verified C-suite for curated companies
   updated: string; // human display date
 }
 
@@ -66,6 +67,12 @@ export interface FilingRef {
   primaryDoc: string;
 }
 
+export interface Executive {
+  name: string;
+  title: string;
+  photo?: string; // optional explicit headshot URL; otherwise an avatar is generated
+}
+
 export interface TenKSections {
   url: string;
   fiscalYear?: string;
@@ -75,4 +82,5 @@ export interface TenKSections {
   riskHeadlines: string[];
   mda?: string;
   employees?: string;
+  executives: Executive[];
 }

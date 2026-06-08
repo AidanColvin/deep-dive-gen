@@ -9,6 +9,8 @@ import type { NextRequest } from "next/server";
 import { findCurated } from "@/lib/registry";
 import { readCurated } from "@/lib/curated";
 import { buildLiveReport } from "@/lib/generate";
+import { buildLeadership } from "@/lib/leadership";
+import type { CuratedMeta } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
       try {
         const curated = findCurated(company);
         const markdown = curated
-          ? await readCurated(curated.slug)
+          ? injectLeadership(await readCurated(curated.slug), curated)
           : await buildLiveReport(company);
 
         // emit in small chunks so the client can render progressively
@@ -55,4 +57,20 @@ export async function GET(req: NextRequest) {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * given a curated report's markdown and its metadata
+ * return the markdown with a Leadership section inserted before Sources
+ */
+function injectLeadership(md: string, c: CuratedMeta): string {
+  if (!c.leaders?.length) return md;
+  const section = buildLeadership(c.leaders, {
+    accent: c.accent,
+    company: c.name,
+    companyUrl: `https://${c.domain}`,
+  });
+  if (!section) return md;
+  const i = md.indexOf("\n## Sources");
+  return i < 0 ? `${md}\n${section}` : `${md.slice(0, i)}\n${section}${md.slice(i)}`;
 }

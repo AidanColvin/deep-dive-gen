@@ -486,6 +486,18 @@ a {
 .report tbody tr:nth-child(even) td {
   background: #fcfbf9;
 }
+.report td img {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  display: block;
+  padding: 0;
+  background: #f1efea;
+}
+.report td:first-child:has(img) {
+  width: 54px;
+}
 
 /* the closing Sources section reads as fine print */
 .report h2#sources + p,

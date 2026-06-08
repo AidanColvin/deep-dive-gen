@@ -43,6 +43,14 @@ Advertising still drives the majority of revenue, but Cloud and subscriptions ar
 
 Source: Alphabet Form 10-K filings, SEC EDGAR [1].
 
+```chart
+{"type":"line","title":"Revenue by Fiscal Year ($B)","x":["FY21","FY22","FY23","FY24","FY25"],"series":[{"name":"Revenue","values":[257.6,282.8,307.4,350.0,402.8],"color":"#4285f4"}]}
+```
+
+```chart
+{"type":"bar","title":"Revenue vs Net Income ($B)","x":["FY21","FY22","FY23","FY24","FY25"],"series":[{"name":"Revenue","values":[257.6,282.8,307.4,350.0,402.8],"color":"#4285f4"},{"name":"Net Income","values":[76.0,60.0,73.8,100.1,132.2],"color":"#10b981"}]}
+```
+
 **FY2025 Profitability** [1]
 
 | Metric | Value |

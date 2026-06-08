@@ -43,6 +43,10 @@ Apple's model is a hardware installed base anchored by iPhone, monetized by a hi
 
 Source: Apple Form 10-K filings, SEC EDGAR [2].
 
+```chart
+{"type":"line","title":"Revenue by Fiscal Year ($B)","x":["FY21","FY22","FY23","FY24","FY25"],"series":[{"name":"Revenue","values":[365.8,394.3,383.3,391.0,416.2],"color":"#0071e3"}]}
+```
+
 **FY2025 Segment Mix**
 
 | Segment | Revenue | % of Total |
@@ -53,6 +57,10 @@ Source: Apple Form 10-K filings, SEC EDGAR [2].
 | Wearables, Home & Accessories | ~$35B | 9% |
 
 Source: Apple FY2025 results [1].
+
+```chart
+{"type":"donut","title":"FY2025 Revenue by Segment","slices":[{"label":"iPhone","value":209.6,"color":"#0071e3"},{"label":"Services","value":109.2,"color":"#10b981"},{"label":"Mac & iPad","value":62,"color":"#f59e0b"},{"label":"Wearables, Home & Acc.","value":35,"color":"#8b5cf6"}]}
+```
 
 **Margins & Cash Generation**
 

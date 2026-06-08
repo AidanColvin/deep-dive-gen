@@ -3,6 +3,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ReactNode } from "react";
+import Chart from "./Charts";
 
 /**
  * given any react children
@@ -51,6 +52,19 @@ export default function MarkdownArticle({ markdown }: { markdown: string }) {
               {children}
             </a>
           ),
+          // unwrap <pre> so chart blocks render as block-level figures
+          pre: ({ children }) => <>{children}</>,
+          code: ({ className, children }) => {
+            if (className && className.includes("language-chart")) {
+              try {
+                return <Chart spec={JSON.parse(toText(children).trim())} />;
+              } catch {
+                // JSON not complete yet (still streaming)
+                return <div className="chart chart-loading">Rendering chart…</div>;
+              }
+            }
+            return <code className={className}>{children}</code>;
+          },
         }}
       >
         {markdown}

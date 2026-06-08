@@ -40,6 +40,10 @@ Anthropic sells model access via API and enterprise products (Claude, Claude Cod
 | Headcount | ~2,300+ (late 2025), trending toward ~5,000 [1] |
 | IPO status | Confidentially filed, June 2026 [2] |
 
+```chart
+{"type":"bar","title":"Post-Money Valuation ($B)","x":["Series G (Feb)","Series H (May)"],"series":[{"name":"Valuation","values":[380,965],"color":"#d97757"}]}
+```
+
 ## Recent Strategic Partnerships
 
 **Amazon + Anthropic** — Major investor and compute partner; Claude is hosted on AWS Bedrock and trained on large Trainium clusters [1].

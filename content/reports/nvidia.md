@@ -43,6 +43,14 @@ NVIDIA sells high-margin accelerated-computing platforms. The mix shift to data 
 
 Source: NVIDIA Form 10-K filings, SEC EDGAR [1].
 
+```chart
+{"type":"line","title":"Revenue by Fiscal Year ($B)","x":["FY22","FY23","FY24","FY25","FY26"],"series":[{"name":"Revenue","values":[26.9,27.0,60.9,130.5,215.9],"color":"#76b900"}]}
+```
+
+```chart
+{"type":"bar","title":"Revenue vs Net Income ($B)","x":["FY22","FY23","FY24","FY25","FY26"],"series":[{"name":"Revenue","values":[26.9,27.0,60.9,130.5,215.9],"color":"#76b900"},{"name":"Net Income","values":[9.8,4.4,29.8,72.9,120.1],"color":"#10b981"}]}
+```
+
 **FY2026 Profitability** [1]
 
 | Metric | Value |

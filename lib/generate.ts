@@ -20,6 +20,7 @@ import {
 import { fetchWikiSummary } from "./wikipedia";
 import { fetchResearch } from "./openalex";
 import { buildLeadership } from "./leadership";
+import { lineChart, barChart, donutChart } from "./charts";
 import { usd, pct, yoy, lastN, latest, valueFor } from "./format";
 import type {
   Executive,
@@ -29,6 +30,7 @@ import type {
   SecProfile,
   TenKSections,
   WikiSummary,
+  YearValue,
 } from "./types";
 
 /**
@@ -217,6 +219,16 @@ function businessModel(fin: Financials | null): string {
   }
   lines.push("");
 
+  const xLabels = yrs.map((fy) => `FY${fy}`);
+  lines.push(
+    lineChart(
+      "Revenue by Fiscal Year ($B)",
+      xLabels,
+      [{ name: "Revenue", values: yrs.map((fy) => scaleB(valueFor(fin.revenue, fy))), color: "#0071e3" }],
+      "$B",
+    ),
+  );
+
   // income statement
   lines.push("**Income Statement** [1]\n");
   lines.push("| Fiscal Year | Revenue | Gross Profit | Operating Income | Net Income | R&D |");
@@ -230,6 +242,18 @@ function businessModel(fin: Financials | null): string {
     );
   }
   lines.push("");
+
+  lines.push(
+    barChart(
+      "Revenue vs Net Income ($B)",
+      xLabels,
+      [
+        { name: "Revenue", values: yrs.map((fy) => scaleB(valueFor(fin.revenue, fy))), color: "#4f46e5" },
+        { name: "Net Income", values: yrs.map((fy) => scaleB(valueFor(fin.netIncome, fy))), color: "#10b981" },
+      ],
+      "$B",
+    ),
+  );
 
   // margins, if gross profit exists for any year
   if (yrs.some((fy) => valueFor(fin.grossProfit, fy) !== undefined)) {
@@ -247,6 +271,35 @@ function businessModel(fin: Financials | null): string {
       );
     }
     lines.push("");
+    lines.push(
+      lineChart(
+        "Margin Trend (%)",
+        xLabels,
+        [
+          { name: "Gross", values: yrs.map((fy) => marginPct(fin.grossProfit, fin.revenue, fy)), color: "#0071e3" },
+          { name: "Operating", values: yrs.map((fy) => marginPct(fin.opIncome, fin.revenue, fy)), color: "#f59e0b" },
+          { name: "Net", values: yrs.map((fy) => marginPct(fin.netIncome, fin.revenue, fy)), color: "#10b981" },
+        ],
+        "%",
+      ),
+    );
+  }
+
+  // where each revenue dollar went (latest year)
+  const dfy = yrs[yrs.length - 1];
+  const dRev = valueFor(fin.revenue, dfy);
+  const dGp = valueFor(fin.grossProfit, dfy);
+  const dOi = valueFor(fin.opIncome, dfy);
+  const dNi = valueFor(fin.netIncome, dfy);
+  if (dRev && dGp !== undefined && dOi !== undefined && dNi !== undefined && dNi > 0 && dGp < dRev) {
+    lines.push(
+      donutChart(`How Each Revenue Dollar Was Used — FY${dfy}`, [
+        { label: "Cost of revenue", value: scaleB(dRev - dGp), color: "#94a3b8" },
+        { label: "Operating expenses", value: scaleB(Math.max(dGp - dOi, 0)), color: "#f59e0b" },
+        { label: "Tax & other", value: scaleB(Math.max(dOi - dNi, 0)), color: "#ef4444" },
+        { label: "Net income", value: scaleB(dNi), color: "#10b981" },
+      ]),
+    );
   }
 
   // balance sheet + capital return snapshot (latest year)
@@ -427,6 +480,18 @@ function marg(
 ): string {
   const v = valueFor(series, fy);
   return v !== undefined && rev ? pct(v / rev) : "—";
+}
+
+/** given a USD value, return it in billions rounded to 1 decimal (0 if absent) */
+function scaleB(v: number | undefined): number {
+  return v === undefined ? 0 : Number((v / 1e9).toFixed(1));
+}
+
+/** given a metric series, the revenue series, and a year, return the margin % */
+function marginPct(series: YearValue[], rev: YearValue[], fy: number): number {
+  const v = valueFor(series, fy);
+  const r = valueFor(rev, fy);
+  return v !== undefined && r ? Number(((v / r) * 100).toFixed(1)) : 0;
 }
 
 function formName(form: string): string {

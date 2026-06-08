@@ -8,6 +8,7 @@
  */
 
 import type { Executive } from "./types";
+import { hierarchyChart } from "./charts";
 
 /**
  * given a person's name and their company
@@ -46,6 +47,17 @@ export function buildLeadership(
   lines.push(
     `Current executive leadership. Each name links to a LinkedIn people search.${pageLink}\n`,
   );
+
+  if (execs.length > 1) {
+    lines.push(
+      hierarchyChart(
+        "Reporting Structure",
+        { label: execs[0].name, sub: execs[0].title },
+        execs.slice(1).map((e) => ({ label: e.name, sub: e.title })),
+      ),
+    );
+  }
+
   lines.push("|  | Executive | Role |");
   lines.push("|---|---|---|");
   for (const e of execs) {

@@ -37,6 +37,10 @@ OpenAI monetizes consumer subscriptions (ChatGPT), API usage, and enterprise con
 | Headcount | ~3,000+ [1] |
 | IPO status | Form S-1 confidentially filed, May 22, 2026 [1] |
 
+```chart
+{"type":"donut","title":"$122B Round (Mar 2026) — Lead Investors","slices":[{"label":"Amazon","value":50,"color":"#ff9900"},{"label":"NVIDIA","value":30,"color":"#76b900"},{"label":"SoftBank","value":30,"color":"#0071e3"},{"label":"Others","value":12,"color":"#94a3b8"}]}
+```
+
 ## Recent Strategic Partnerships
 
 **Microsoft + OpenAI** — The foundational partnership: Azure as primary cloud and an estimated ~27% economic stake; OpenAI models power Microsoft Copilot [2].

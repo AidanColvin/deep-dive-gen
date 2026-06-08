@@ -43,6 +43,14 @@ AWS sells consumption-based cloud infrastructure at high operating margins, fund
 
 Source: Amazon Form 10-K segment disclosures, SEC EDGAR [1].
 
+```chart
+{"type":"line","title":"AWS Segment Revenue ($B)","x":["2021","2022","2023","2024","2025"],"series":[{"name":"AWS Revenue","values":[62.2,80.1,90.8,108.0,129.0],"color":"#ff9900"}]}
+```
+
+```chart
+{"type":"donut","title":"AWS Share of Amazon Revenue — 2025","slices":[{"label":"AWS","value":129,"color":"#ff9900"},{"label":"Rest of Amazon","value":587.9,"color":"#94a3b8"}]}
+```
+
 **Parent context (Amazon, 2025)** [3]
 
 | Metric | Value |

@@ -648,6 +648,147 @@ a {
   word-break: break-word;
 }
 
+/* --------------------------------- charts --------------------------------- */
+.chart {
+  margin: 14px 0 26px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+}
+.chart-title {
+  font-family: var(--mono);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 12px;
+}
+.chart-svg {
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  display: block;
+}
+.chart-svg text {
+  font-family: var(--sans);
+  font-size: 13px;
+  fill: var(--faint);
+}
+.chart-grid {
+  stroke: var(--line);
+  stroke-width: 1;
+}
+.chart-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.chart-legend-col {
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 0;
+  min-width: 150px;
+}
+.chart-key {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.chart-key i {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: 0 0 auto;
+}
+.chart-key b {
+  margin-left: auto;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.chart-pie-wrap {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  flex-wrap: wrap;
+}
+.chart-pie {
+  width: 180px;
+  height: 180px;
+  flex: 0 0 auto;
+}
+.chart-loading {
+  color: var(--faint);
+  font-size: 13px;
+  font-style: italic;
+}
+
+/* leadership org chart */
+.org {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0 8px;
+}
+.org-root,
+.org-node {
+  border: 1px solid var(--line-strong);
+  border-radius: 9px;
+  padding: 8px 14px;
+  text-align: center;
+  background: var(--panel);
+  min-width: 120px;
+}
+.org-root {
+  border-color: var(--accent, #4f46e5);
+  box-shadow: 0 6px 18px -12px rgba(0, 0, 0, 0.4);
+}
+.org-name {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.org-sub {
+  font-size: 11.5px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.org-stem {
+  width: 1px;
+  height: 18px;
+  background: var(--line-strong);
+}
+.org-children {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 18px;
+  position: relative;
+}
+.org-children .org-node {
+  position: relative;
+}
+.org-children .org-node::before {
+  content: "";
+  position: absolute;
+  top: -18px;
+  left: 50%;
+  width: 1px;
+  height: 18px;
+  background: var(--line-strong);
+}
+
 /* ------------------------------- responsive ------------------------------- */
 @media (max-width: 860px) {
   .how {

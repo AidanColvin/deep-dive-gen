@@ -43,6 +43,14 @@ Microsoft monetizes recurring enterprise software and cloud consumption at ~69% 
 
 Source: Microsoft Form 10-K filings, SEC EDGAR [1].
 
+```chart
+{"type":"line","title":"Revenue by Fiscal Year ($B)","x":["FY21","FY22","FY23","FY24","FY25"],"series":[{"name":"Revenue","values":[168.1,198.3,211.9,245.1,281.7],"color":"#0078d4"}]}
+```
+
+```chart
+{"type":"bar","title":"Revenue vs Net Income ($B)","x":["FY21","FY22","FY23","FY24","FY25"],"series":[{"name":"Revenue","values":[168.1,198.3,211.9,245.1,281.7],"color":"#0078d4"},{"name":"Net Income","values":[61.3,72.7,72.4,88.1,101.8],"color":"#10b981"}]}
+```
+
 **FY2025 Profitability** [1]
 
 | Metric | Value |

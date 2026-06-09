@@ -9,12 +9,14 @@
 type Series = { name: string; values: number[]; color?: string };
 type Slice = { label: string; value: number; color?: string };
 type Node = { label: string; sub?: string };
+type TreeNode = { label: string; sub?: string; children?: TreeNode[] };
 
 export type ChartSpec =
   | { type: "line"; title?: string; x: string[]; series: Series[]; unit?: string }
   | { type: "bar"; title?: string; x: string[]; series: Series[]; unit?: string }
   | { type: "pie" | "donut"; title?: string; slices: Slice[]; unit?: string }
-  | { type: "hierarchy"; title?: string; root: Node; children: Node[] };
+  | { type: "hierarchy"; title?: string; root: Node; children: Node[] }
+  | { type: "tree"; title?: string; root: TreeNode };
 
 const PALETTE = [
   "#4f46e5", "#0071e3", "#10b981", "#f59e0b", "#ef4444",
@@ -31,6 +33,8 @@ function fmt(v: number): string {
 
 export default function Chart({ spec }: { spec: ChartSpec }) {
   switch (spec.type) {
+    case "tree":
+      return <Tree spec={spec} />;
     case "hierarchy":
       return <Hierarchy spec={spec} />;
     case "pie":
@@ -198,6 +202,51 @@ function Pie({ spec }: { spec: Extract<ChartSpec, { type: "pie" | "donut" }> }) 
         </div>
       </div>
     </figure>
+  );
+}
+
+/* --------------------------- multi-level tree --------------------------- */
+
+function Tree({ spec }: { spec: Extract<ChartSpec, { type: "tree" }> }) {
+  return (
+    <figure className="chart">
+      {spec.title && <figcaption className="chart-title">{spec.title}</figcaption>}
+      <div className="tree-scroll">
+        <TreeBox node={spec.root} depth={0} />
+      </div>
+    </figure>
+  );
+}
+
+function TreeBox({ node, depth }: { node: TreeNode; depth: number }) {
+  const kids = node.children ?? [];
+  const allLeaves = kids.length > 0 && kids.every((k) => !(k.children && k.children.length));
+  const boxClass =
+    depth === 0 ? "tree-box tree-box-root" : `tree-box tree-box-l${Math.min(depth, 2)}`;
+  return (
+    <div className="tree-node">
+      <div className={boxClass}>
+        <div className="tree-label">{node.label}</div>
+        {node.sub && <div className="tree-sub">{node.sub}</div>}
+      </div>
+      {kids.length === 0 ? null : allLeaves ? (
+        // terminal children stack as a vertical chain — keeps wide groups legible
+        <div className="tree-leaves">
+          {kids.map((c, i) => (
+            <div key={i} className="tree-leaf">
+              {c.label}
+              {c.sub && <span className="tree-leaf-sub"> · {c.sub}</span>}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="tree-children">
+          {kids.map((c, i) => (
+            <TreeBox key={i} node={c} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

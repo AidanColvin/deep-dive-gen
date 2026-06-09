@@ -9,6 +9,7 @@ import type {
   Financials,
   FilingRef,
   SecProfile,
+  Subsidiary,
   TenKSections,
   YearValue,
 } from "./types";
@@ -19,7 +20,8 @@ interface TickerRow {
   title: string;
 }
 
-// common spoken names that differ from the SEC registered title
+// common spoken names that differ from the SEC registered title, or short
+// names that collide with an unrelated ticker (e.g. "HP" is Helmerich & Payne)
 const NAME_ALIASES: Record<string, string> = {
   google: "Alphabet Inc.",
   alphabet: "Alphabet Inc.",
@@ -28,6 +30,10 @@ const NAME_ALIASES: Record<string, string> = {
   "amazon web services": "Amazon.com, Inc.",
   aws: "Amazon.com, Inc.",
   amazon: "Amazon.com, Inc.",
+  hp: "HP Inc",
+  "hewlett packard": "HP Inc",
+  tsmc: "Taiwan Semiconductor Manufacturing",
+  "arm holdings": "Arm Holdings",
 };
 
 /**
@@ -45,11 +51,15 @@ export async function resolveCik(
 
   const rows = Object.values(data);
   const raw = query.trim().toLowerCase();
-  const q = NAME_ALIASES[raw] ? NAME_ALIASES[raw].toLowerCase() : raw;
+  const aliased = NAME_ALIASES[raw];
+  const q = aliased ? aliased.toLowerCase() : raw;
 
-  // an exact ticker match always wins
-  const tickerHit = rows.find((r) => r.ticker.toLowerCase() === raw);
-  if (tickerHit) return format(tickerHit);
+  // an exact ticker match wins — but skip it for aliased queries, since the
+  // alias is a name and the raw text may collide with an unrelated ticker
+  if (!aliased) {
+    const tickerHit = rows.find((r) => r.ticker.toLowerCase() === raw);
+    if (tickerHit) return format(tickerHit);
+  }
 
   // otherwise score every candidate and take the best. titles are
   // normalized (lowercase, no leading "the", punctuation -> spaces) so
@@ -192,17 +202,254 @@ export async function fetch10KSections(
   const riskSeg = items["1A"];
   const mdaSeg = items["7"];
 
+  const competition = businessSeg ? competitionExcerpt(businessSeg) : undefined;
+
   return {
     url,
     fiscalYear: ref.date?.slice(0, 4),
     business: businessSeg ? excerpt(businessSeg, 1700) : undefined,
-    competition: businessSeg ? competitionExcerpt(businessSeg) : undefined,
+    competition,
+    competitors: competition ? extractCompetitors(competition) : [],
+    products: businessSeg ? subsectionExcerpt(businessSeg, "Products") : undefined,
+    productList: businessSeg ? extractProductList(businessSeg) : [],
+    customers: businessSeg ? subsectionExcerpt(businessSeg, "Customers") : undefined,
+    customerFacts: businessSeg ? extractCustomerFacts(businessSeg) : [],
     risks: riskSeg ? excerpt(riskSeg, 1100) : undefined,
     riskHeadlines: riskSeg ? riskHeadlines(riskSeg) : [],
     mda: mdaSeg ? excerpt(mdaSeg, 1100) : undefined,
     employees: extractEmployees(text),
     executives: extractExecutives(text),
   };
+}
+
+/**
+ * given a CIK and the company's filing list
+ * return the legal subsidiaries disclosed in the latest filing that carries
+ * an Exhibit 21 ("Subsidiaries of the Registrant"). free, structured-ish data
+ * straight from EDGAR. returns [] if no Ex-21 is found or it can't be parsed.
+ */
+export async function fetchSubsidiaries(
+  cik: string,
+  filings: FilingRef[],
+): Promise<Subsidiary[]> {
+  const cikInt = parseInt(cik, 10);
+  // Ex-21 ships with annual reports; check the few most recent
+  const annuals = filings
+    .filter((f) => ["10-K", "10-K/A", "20-F"].includes(f.form))
+    .slice(0, 3);
+
+  for (const ref of annuals) {
+    const acc = ref.accession.replace(/-/g, "");
+    const base = `https://www.sec.gov/Archives/edgar/data/${cikInt}/${acc}`;
+    const index = await getJson<any>(`${base}/index.json`, { revalidate: 86400 });
+    const items: any[] = index?.directory?.item ?? [];
+    // match ex-21, ex21, exhibit21, exhibit_21, ...exhibit211.htm, etc.,
+    // without matching ex-32.1 certs or material contracts like ex-10.21
+    const ex21 = items.find((it) => /ex(?:hibit)?[\s._-]*21/i.test(it.name ?? ""));
+    if (!ex21) continue;
+    const html = await getText(`${base}/${ex21.name}`, { revalidate: 86400 });
+    if (!html) continue;
+    const subs = parseSubsidiaries(html);
+    if (subs.length >= 2) return subs;
+  }
+  return [];
+}
+
+/* ------------------------- subsidiary extraction ------------------------- */
+
+// US states/territories + common subsidiary jurisdictions, used to split a
+// "Name ......... Jurisdiction" row and to group subsidiaries on the map.
+const JURISDICTIONS: string[] = [
+  "Delaware", "California", "Nevada", "New York", "Texas", "Washington",
+  "Massachusetts", "Florida", "Illinois", "Virginia", "Colorado", "Georgia",
+  "Arizona", "Oregon", "Pennsylvania", "Michigan", "Ohio", "New Jersey",
+  "Maryland", "Minnesota", "Connecticut", "North Carolina", "Wisconsin",
+  "United States", "Ireland", "United Kingdom", "England", "Scotland",
+  "Netherlands", "Luxembourg", "Switzerland", "Germany", "France", "Spain",
+  "Italy", "Sweden", "Norway", "Denmark", "Finland", "Belgium", "Austria",
+  "Canada", "Mexico", "Brazil", "Bermuda", "Cayman Islands", "British Virgin Islands",
+  "Singapore", "Hong Kong", "China", "Japan", "South Korea", "Korea", "Taiwan",
+  "India", "Australia", "New Zealand", "Israel", "United Arab Emirates",
+  "Mauritius", "Jersey", "Guernsey", "Gibraltar", "Malta", "Cyprus",
+  "Poland", "Czech Republic", "Hungary", "Romania", "Portugal", "Greece",
+  "Indonesia", "Malaysia", "Thailand", "Vietnam", "Philippines", "South Africa",
+];
+
+const JUR_RE = new RegExp(
+  `[\\s,(–—-]+(${JURISDICTIONS.map((j) => j.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\$&")).join("|")})\\.?\\s*$`,
+  "i",
+);
+
+/**
+ * given raw Exhibit-21 HTML
+ * return a de-duplicated list of subsidiaries with their jurisdiction
+ */
+function parseSubsidiaries(html: string): Subsidiary[] {
+  const text = htmlToText(html);
+  const out: Subsidiary[] = [];
+  const seen = new Set<string>();
+
+  for (const raw of text.split("\n")) {
+    let line = raw.replace(/\s+/g, " ").trim();
+    // drop list numbering and leading bullets
+    line = line.replace(/^\s*(\d{1,3}[.)]|[•·*-])\s*/, "");
+    if (line.length < 3 || line.length > 120) continue;
+    // skip headers, page furniture, and the exhibit title line
+    if (/^(exhibit|subsidiar|name\b|entity\b|jurisdiction|state |country|page\b|table of|incorporation|organization|state or other)/i.test(line))
+      continue;
+    if (/\b(jurisdiction|incorporation|organization)\b/i.test(line) && !/(inc|llc|ltd|corp|gmbh|holdings|limited)\b/i.test(line))
+      continue;
+    if (!/[A-Za-z]/.test(line) || !/[A-Z]/.test(line)) continue;
+
+    const jm = line.match(JUR_RE);
+    const jurisdiction = jm ? canonicalJurisdiction(jm[1]) : undefined;
+    let name = jm ? line.slice(0, jm.index).trim() : line;
+    // trim trailing dotted leaders / stray separators left from the table
+    name = name.replace(/[.\s,;:–—-]+$/, "").trim();
+    if (name.length < 3 || name.length > 90) continue;
+    // a real entity name usually carries a corporate suffix or several words
+    if (!/(inc|llc|ltd|corp|company|co|gmbh|s\.?a\.?|b\.?v\.?|plc|holdings|group|kk|pty|ag|nv|sarl|limited|technologies|labs|ventures|capital|services|international)\b/i.test(name) &&
+        name.split(" ").length < 2)
+      continue;
+
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ name: sanitizeMd(name), jurisdiction });
+    if (out.length >= 80) break;
+  }
+  return out;
+}
+
+function canonicalJurisdiction(j: string): string {
+  const t = j.trim();
+  if (/^(england|scotland|wales)$/i.test(t)) return "United Kingdom";
+  if (/^korea$/i.test(t)) return "South Korea";
+  return t.replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/* ----------------------- business-subsection helpers ---------------------- */
+
+/**
+ * given the Business section and a subsection name (e.g. "Customers")
+ * return a clean prose excerpt of that subsection if it appears as a header
+ */
+function subsectionExcerpt(business: string, label: string): string | undefined {
+  const re = new RegExp(`\\n[ \\t]*${label}\\b`, "i");
+  const at = business.search(re);
+  if (at < 0) return undefined;
+  const sub = business.slice(at).replace(new RegExp(`^\\s*${label}\\b[.:\\s\\-—]*`, "i"), "");
+  const out = excerpt(sub, 900);
+  return out.length > 120 ? out : undefined;
+}
+
+/**
+ * given a body of prose and a lead-in pattern, pull the trailing list of
+ * proper-noun items it introduces (e.g. "compete with A, B, and C")
+ */
+function clauseList(text: string, lead: RegExp): string[] {
+  const m = text.match(lead);
+  if (!m) return [];
+  // take from the end of the lead-in up to the next sentence stop
+  const after = text.slice((m.index ?? 0) + m[0].length);
+  const clause = after.split(/(?<=[a-z0-9)])\.\s|[.;]\s/)[0] ?? after;
+  const parts = clause
+    .split(/,| and | & |\/|;/)
+    .map((s) => s.replace(/^(the|other|various|certain|many|its|our|a|an)\s+/i, "").trim())
+    // drop a trailing category noun left dangling on the last item
+    // (e.g. "Converse brands" → "Converse", "cloud services" → "cloud")
+    .map((s) => s.replace(/\s+(brands?|products?|services|segments?|divisions?|businesses)$/i, "").trim())
+    .map((s) => s.replace(/\\([*_`|])/g, "$1").replace(/[*_`|]/g, "").trim());
+
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const p of parts) {
+    // keep short, proper-noun-ish names; drop generic words and long phrases
+    if (p.length < 2 || p.length > 40) continue;
+    if (!/^[A-Z0-9]/.test(p)) continue;
+    const words = p.split(/\s+/);
+    if (words.length > 5) continue;
+    const key = p.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(p);
+    if (out.length >= 12) break;
+  }
+  return out;
+}
+
+/**
+ * given the Competition prose
+ * return named competitor companies, if the text lists them
+ */
+function extractCompetitors(competition: string): string[] {
+  for (const lead of [
+    /compet(?:e|es|ing)\s+(?:primarily\s+)?with\s+(?:companies\s+such\s+as\s+|such\s+as\s+|firms\s+(?:such\s+as\s+|including\s+)|including\s+)?/i,
+    /competitors?\s+(?:include|are|such as)\s+/i,
+    /(?:such as|including)\s+/i,
+  ]) {
+    const list = clauseList(competition, lead);
+    if (list.length >= 2) return list;
+  }
+  return [];
+}
+
+/**
+ * given the Business section
+ * return named products & services, if the text lists them
+ */
+function extractProductList(business: string): string[] {
+  // only trust phrasings that explicitly introduce a product/brand list —
+  // looser verb patterns ("sells … in Brazil, China") grab geography, not products
+  for (const lead of [
+    /(?:products?|services|offerings|brands)\s+(?:and\s+services\s+)?(?:include|are|such as|consist of)\s+/i,
+    /(?:products?|brands?)\s+(?:are\s+sold\s+)?under\s+(?:the\s+)?/i,
+  ]) {
+    const list = clauseList(business, lead).filter((p) => !isGeography(p));
+    if (list.length >= 3) return list;
+  }
+  return [];
+}
+
+const GEO = new Set(
+  [
+    ...JURISDICTIONS,
+    "Russia", "Turkey", "Ukraine", "Egypt", "Nigeria", "Kenya", "Argentina",
+    "Chile", "Colombia", "Peru", "Saudi Arabia", "Qatar", "Pakistan", "Bangladesh",
+    "Europe", "Asia", "Africa", "Americas", "Latin America", "North America",
+    "EMEA", "APAC", "U.S.", "US", "USA", "U.K.", "UK", "EU",
+  ].map((s) => s.toLowerCase()),
+);
+
+/** given a candidate name, return true if it is a country/region, not a product */
+function isGeography(name: string): boolean {
+  return GEO.has(name.toLowerCase().replace(/\.$/, "").trim());
+}
+
+/**
+ * given the Business section
+ * return short customer-concentration facts, if disclosed
+ */
+function extractCustomerFacts(business: string): string[] {
+  const facts: string[] = [];
+  const seen = new Set<string>();
+  const patterns = [
+    /[^.]*\bno\s+(?:single\s+)?customer\s+account(?:ed|s)?\s+for\s+(?:more than\s+)?\d+%[^.]*\./i,
+    /[^.]*\b(?:one|two|a single)\s+customer[s]?\s+account(?:ed|s)?\s+for[^.]*\./i,
+    /[^.]*\baccounted\s+for\s+(?:approximately\s+)?\d+%\s+of\s+(?:our\s+)?(?:net\s+)?(?:revenue|sales)[^.]*\./i,
+  ];
+  for (const re of patterns) {
+    const m = business.match(re);
+    if (!m) continue;
+    const fact = sanitizeMd(m[0].replace(/\s+/g, " ").trim());
+    if (fact.length < 25 || fact.length > 220) continue;
+    const key = fact.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    facts.push(fact);
+    if (facts.length >= 3) break;
+  }
+  return facts;
 }
 
 /**
@@ -535,49 +782,95 @@ function cleanTitle(t: string): string {
 }
 
 // XBRL concept candidates, in priority order
+// each metric lists candidate concepts in two taxonomies: US GAAP (domestic
+// filers) and IFRS (foreign private issuers filing 20-F under ifrs-full).
 const CONCEPTS = {
-  revenue: [
-    "RevenueFromContractWithCustomerExcludingAssessedTax",
-    "Revenues",
-    "RevenueFromContractWithCustomerIncludingAssessedTax",
-    "SalesRevenueNet",
-  ],
-  netIncome: ["NetIncomeLoss"],
-  grossProfit: ["GrossProfit"],
-  rnd: ["ResearchAndDevelopmentExpense"],
-  opIncome: ["OperatingIncomeLoss"],
-  assets: ["Assets"],
-  liabilities: ["Liabilities"],
-  equity: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
-  buybacks: ["PaymentsForRepurchaseOfCommonStock"],
+  revenue: {
+    gaap: [
+      "RevenueFromContractWithCustomerExcludingAssessedTax",
+      "Revenues",
+      "RevenueFromContractWithCustomerIncludingAssessedTax",
+      "SalesRevenueNet",
+    ],
+    ifrs: ["Revenue", "RevenueFromContractsWithCustomers"],
+  },
+  netIncome: { gaap: ["NetIncomeLoss"], ifrs: ["ProfitLoss", "ProfitLossAttributableToOwnersOfParent"] },
+  grossProfit: { gaap: ["GrossProfit"], ifrs: ["GrossProfit"] },
+  rnd: { gaap: ["ResearchAndDevelopmentExpense"], ifrs: ["ResearchAndDevelopmentExpense"] },
+  opIncome: { gaap: ["OperatingIncomeLoss"], ifrs: ["ProfitLossFromOperatingActivities"] },
+  assets: { gaap: ["Assets"], ifrs: ["Assets"] },
+  liabilities: { gaap: ["Liabilities"], ifrs: ["Liabilities"] },
+  equity: {
+    gaap: ["StockholdersEquity", "StockholdersEquityIncludingPortionAttributableToNoncontrollingInterest"],
+    ifrs: ["Equity", "EquityAttributableToOwnersOfParent"],
+  },
+  buybacks: { gaap: ["PaymentsForRepurchaseOfCommonStock"], ifrs: ["PaymentsToAcquireOrRedeemEntitysShares"] },
 };
 
+type Concept = { gaap: string[]; ifrs: string[] };
+
 /**
- * given the facts root, candidate concept names, and period type
- * return one merged annual series, filling each fiscal year from the
- * highest-priority concept that reports it. companies re-tag line items
- * over time (e.g. Revenues -> RevenueFromContractWithCustomer...), so a
- * single concept leaves gaps; merging across candidates yields a
- * contiguous multi-year series.
+ * given the facts root, determine the reporting currency: USD if present,
+ * otherwise the first ISO currency the revenue concept reports in (EUR, JPY…)
  */
-function mergedAnnual(
-  factsRoot: any,
+function detectCurrency(f: any): string {
+  const sources: [string, string[]][] = [
+    ["us-gaap", CONCEPTS.revenue.gaap],
+    ["ifrs-full", CONCEPTS.revenue.ifrs],
+  ];
+  for (const [ns, names] of sources) {
+    for (const name of names) {
+      const units = f[ns]?.[name]?.units;
+      if (units) {
+        if (units.USD) return "USD";
+        const cur = Object.keys(units).find((k) => /^[A-Z]{3}$/.test(k));
+        if (cur) return cur;
+      }
+    }
+  }
+  return "USD";
+}
+
+/**
+ * given the facts root, a namespace, concept names, currency, and period type
+ * return one merged annual series, filling each fiscal year from the
+ * highest-priority concept that reports it.
+ */
+function mergedAnnualNs(
+  f: any,
+  ns: string,
   names: string[],
+  currency: string,
   instant: boolean,
 ): YearValue[] {
-  const gaap = factsRoot?.["us-gaap"];
-  if (!gaap) return [];
+  const root = f?.[ns];
+  if (!root) return [];
   const byFy = new Map<number, number>();
   for (const name of names) {
-    const units = gaap[name]?.units?.USD;
+    const units = root[name]?.units?.[currency];
     if (!Array.isArray(units)) continue;
     for (const yv of toAnnual(units, instant)) {
-      if (!byFy.has(yv.fy)) byFy.set(yv.fy, yv.val); // first (highest priority) wins
+      if (!byFy.has(yv.fy)) byFy.set(yv.fy, yv.val);
     }
   }
   return [...byFy.entries()]
     .map(([fy, val]) => ({ fy, val }))
     .sort((a, b) => a.fy - b.fy);
+}
+
+/**
+ * given a metric concept, try US GAAP then IFRS and return the first that
+ * yields a series, in the detected reporting currency
+ */
+function seriesFor(
+  f: any,
+  concept: Concept,
+  currency: string,
+  instant: boolean,
+): YearValue[] {
+  const gaap = mergedAnnualNs(f, "us-gaap", concept.gaap, currency, instant);
+  if (gaap.length) return gaap;
+  return mergedAnnualNs(f, "ifrs-full", concept.ifrs, currency, instant);
 }
 
 /**
@@ -614,15 +907,17 @@ export async function fetchFinancials(cik: string): Promise<Financials | null> {
   );
   if (!facts?.facts) return null;
   const f = facts.facts;
+  const currency = detectCurrency(f);
   return {
-    revenue: mergedAnnual(f, CONCEPTS.revenue, false),
-    netIncome: mergedAnnual(f, CONCEPTS.netIncome, false),
-    grossProfit: mergedAnnual(f, CONCEPTS.grossProfit, false),
-    rnd: mergedAnnual(f, CONCEPTS.rnd, false),
-    opIncome: mergedAnnual(f, CONCEPTS.opIncome, false),
-    assets: mergedAnnual(f, CONCEPTS.assets, true),
-    liabilities: mergedAnnual(f, CONCEPTS.liabilities, true),
-    equity: mergedAnnual(f, CONCEPTS.equity, true),
-    buybacks: mergedAnnual(f, CONCEPTS.buybacks, false),
+    currency,
+    revenue: seriesFor(f, CONCEPTS.revenue, currency, false),
+    netIncome: seriesFor(f, CONCEPTS.netIncome, currency, false),
+    grossProfit: seriesFor(f, CONCEPTS.grossProfit, currency, false),
+    rnd: seriesFor(f, CONCEPTS.rnd, currency, false),
+    opIncome: seriesFor(f, CONCEPTS.opIncome, currency, false),
+    assets: seriesFor(f, CONCEPTS.assets, currency, true),
+    liabilities: seriesFor(f, CONCEPTS.liabilities, currency, true),
+    equity: seriesFor(f, CONCEPTS.equity, currency, true),
+    buybacks: seriesFor(f, CONCEPTS.buybacks, currency, false),
   };
 }

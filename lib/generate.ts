@@ -15,12 +15,13 @@ import {
   findLatest10K,
   fetch10KSections,
   fetchExecutives,
+  fetchSubsidiaries,
   resolveCik,
 } from "./sec";
 import { fetchWikiSummary } from "./wikipedia";
 import { fetchResearch } from "./openalex";
 import { buildLeadership } from "./leadership";
-import { lineChart, barChart, donutChart } from "./charts";
+import { lineChart, barChart, donutChart, treeChart } from "./charts";
 import { usd, pct, yoy, lastN, latest, valueFor } from "./format";
 import type {
   Executive,
@@ -28,7 +29,9 @@ import type {
   Financials,
   ResearchSignal,
   SecProfile,
+  Subsidiary,
   TenKSections,
+  TreeNode,
   WikiSummary,
   YearValue,
 } from "./types";
@@ -48,12 +51,13 @@ export async function buildLiveReport(query: string): Promise<string> {
     fetchResearch(hit?.title ?? query),
   ]);
 
-  // the 10-K narrative and the insider-derived executives both depend on
-  // the filing list, so fetch them after, in parallel
+  // the 10-K narrative, the insider-derived executives, and the legal
+  // subsidiaries all depend on the filing list, so fetch them after, in parallel
   const ref = filings.length ? findLatest10K(filings) : null;
-  const [tenk, form4Execs] = await Promise.all([
+  const [tenk, form4Execs, subsidiaries] = await Promise.all([
     hit && ref ? fetch10KSections(hit.cik, ref) : Promise.resolve(null),
     hit ? fetchExecutives(hit.cik, filings) : Promise.resolve([] as Executive[]),
+    hit ? fetchSubsidiaries(hit.cik, filings) : Promise.resolve([] as Subsidiary[]),
   ]);
   const execs = form4Execs.length ? form4Execs : tenk?.executives ?? [];
 
@@ -65,9 +69,12 @@ export async function buildLiveReport(query: string): Promise<string> {
     banner(profile, hit?.ticker),
     execSummary(name, profile, financials, wiki, tenk),
     companyOverview(name, profile, wiki, tenk),
+    productsAndServices(name, tenk, wiki),
+    corporateStructure(name, subsidiaries),
     strategicDirection(name, tenk, wiki),
     businessModel(financials),
     competitivePositioning(name, financials, tenk),
+    customers(name, tenk),
     keyRisks(name, tenk, profile),
     recentFilings(filings),
     researchSection(research),
@@ -172,6 +179,109 @@ function companyOverview(
   if (profile?.formerNames?.length)
     facts.push(`**Former names:** ${profile.formerNames.slice(0, 2).join("; ")}`);
   if (facts.length) lines.push("\n" + facts.map((f) => `- ${f} [1]`).join("\n"));
+  return lines.join("\n") + "\n";
+}
+
+function productsAndServices(
+  name: string,
+  tenk: TenKSections | null,
+  wiki: WikiSummary | null,
+): string {
+  // merge product names disclosed in the 10-K with any the Wikipedia lead lists
+  const items = mergeNames(tenk?.productList ?? [], productNamesFromText(wiki?.extract));
+  const prose = tenk?.products;
+  if (!items.length && !prose) return ""; // nothing reliable to show
+
+  const lines: string[] = ["## Products & Services\n"];
+  if (prose) {
+    lines.push(`From Item 1 (Business) of ${name}'s Form 10-K [4]:\n`);
+    lines.push(prose);
+    lines.push("");
+  } else {
+    lines.push(
+      `Principal products and services attributed to ${name} in public sources [2][4]:\n`,
+    );
+  }
+
+  if (items.length >= 3) {
+    const root: TreeNode = {
+      label: name,
+      sub: `${items.length} offerings`,
+      children: items.slice(0, 12).map((p) => ({ label: p })),
+    };
+    lines.push(treeChart("Product & Service Portfolio", root));
+  } else if (items.length) {
+    lines.push(items.map((p) => `- ${p}`).join("\n") + "\n");
+  }
+  return lines.join("\n") + "\n";
+}
+
+function corporateStructure(name: string, subs: Subsidiary[]): string {
+  if (subs.length < 2) return "";
+  const lines: string[] = ["## Corporate Structure\n"];
+  lines.push(
+    `${name} discloses **${subs.length}** principal ${
+      subs.length === 1 ? "subsidiary" : "subsidiaries"
+    } in Exhibit 21 of its latest annual report [1]. The hierarchy and geographic spread below are drawn directly from that exhibit.`,
+  );
+  lines.push("");
+
+  // group subsidiaries by jurisdiction, largest groups first
+  const groups = new Map<string, Subsidiary[]>();
+  for (const s of subs) {
+    const k = s.jurisdiction ?? "Other / unspecified";
+    (groups.get(k) ?? groups.set(k, []).get(k)!).push(s);
+  }
+  const ordered = [...groups.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  // parent → jurisdiction → subsidiary leaves (capped per group for legibility)
+  const children: TreeNode[] = ordered.slice(0, 6).map(([jur, list]) => ({
+    label: jur,
+    sub: `${list.length} ${list.length === 1 ? "entity" : "entities"}`,
+    children: list.slice(0, 6).map((s) => ({ label: s.name })),
+  }));
+  const shownGroups = ordered.slice(0, 6).length;
+  if (ordered.length > shownGroups)
+    children.push({ label: `+${ordered.length - shownGroups} more jurisdictions` });
+
+  lines.push(
+    treeChart(`${name} — Parent & Subsidiary Structure`, {
+      label: name,
+      sub: "Parent (Registrant)",
+      children,
+    }),
+  );
+
+  // a donut of subsidiaries by jurisdiction gives the geographic footprint
+  if (ordered.length >= 2) {
+    const top = ordered.slice(0, 6);
+    const rest = ordered.slice(6).reduce((n, [, l]) => n + l.length, 0);
+    const slices = top.map(([jur, l]) => ({ label: jur, value: l.length }));
+    if (rest) slices.push({ label: "Other", value: rest });
+    lines.push(donutChart("Subsidiaries by Jurisdiction", slices));
+  }
+
+  lines.push(
+    "*Source: Exhibit 21 — Subsidiaries of the Registrant, SEC EDGAR. Entity lists are not exhaustive of all affiliated companies [1].*",
+  );
+  return lines.join("\n") + "\n";
+}
+
+function customers(name: string, tenk: TenKSections | null): string {
+  const prose = tenk?.customers;
+  const facts = tenk?.customerFacts ?? [];
+  if (!prose && !facts.length) return "";
+  const lines: string[] = ["## Customers\n"];
+  if (prose) {
+    lines.push(`How ${name} describes its customers, from Item 1 of its Form 10-K [4]:\n`);
+    lines.push(prose);
+    lines.push("");
+  }
+  if (facts.length) {
+    lines.push("**Customer concentration** [4]\n");
+    for (const f of facts) lines.push(`- ${f}`);
+    lines.push("");
+  }
   return lines.join("\n") + "\n";
 }
 
@@ -327,6 +437,21 @@ function competitivePositioning(
   tenk: TenKSections | null,
 ): string {
   const lines: string[] = ["## Competitive Positioning\n"];
+
+  // a named-competitor landscape, when the 10-K lists rivals explicitly
+  if (tenk && tenk.competitors.length >= 3) {
+    lines.push("### Competitive Landscape\n");
+    lines.push(`${name} names the following principal competitors in its Form 10-K [4]:`);
+    lines.push("");
+    lines.push(
+      treeChart("Named Competitors", {
+        label: name,
+        sub: "vs.",
+        children: tenk.competitors.slice(0, 10).map((c) => ({ label: c })),
+      }),
+    );
+  }
+
   if (tenk?.competition) {
     lines.push("### Competition (from the 10-K)\n");
     lines.push(tenk.competition);
@@ -467,6 +592,38 @@ function notFound(query: string): string {
 }
 
 /* ------------------------------ helpers ------------------------------ */
+
+/**
+ * given a Wikipedia lead paragraph
+ * return product/brand names it lists after a "products include …" lead-in
+ */
+function productNamesFromText(text: string | undefined): string[] {
+  if (!text) return [];
+  const m = text.match(
+    /(?:products?|services|brands)\s+(?:and\s+services\s+)?(?:include|are|such as)\s+([^.]+)\./i,
+  );
+  if (!m) return [];
+  return m[1]
+    .split(/,| and | & |\//)
+    .map((s) => s.replace(/^(the|other|various|its)\s+/i, "").trim())
+    .filter((s) => s.length >= 2 && s.length <= 40 && /^[A-Z0-9]/.test(s))
+    .slice(0, 12);
+}
+
+/**
+ * given two name lists, return a de-duplicated merge preserving first order
+ */
+function mergeNames(a: string[], b: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const x of [...a, ...b]) {
+    const key = x.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(x);
+  }
+  return out;
+}
 
 function cell(series: { fy: number; val: number }[], fy: number): string {
   const v = valueFor(series, fy);

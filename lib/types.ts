@@ -37,6 +37,7 @@ export interface SecProfile {
 }
 
 export interface Financials {
+  currency: string; // ISO code of the reporting currency (USD, EUR, JPY, …)
   revenue: YearValue[];
   netIncome: YearValue[];
   grossProfit: YearValue[];
@@ -78,9 +79,27 @@ export interface TenKSections {
   fiscalYear?: string;
   business?: string;
   competition?: string;
+  competitors: string[]; // named competitor companies, if extractable
+  products?: string; // Products / Products & Services subsection prose
+  productList: string[]; // named products & services, if extractable
+  customers?: string; // Customers subsection prose
+  customerFacts: string[]; // customer-concentration facts (e.g. "X = 14% of revenue")
   risks?: string;
   riskHeadlines: string[];
   mda?: string;
   employees?: string;
   executives: Executive[];
+}
+
+/** a single legal subsidiary, parsed from a 10-K Exhibit 21 */
+export interface Subsidiary {
+  name: string;
+  jurisdiction?: string;
+}
+
+/** a recursive node for the multi-level tree (org / product taxonomy) chart */
+export interface TreeNode {
+  label: string;
+  sub?: string;
+  children?: TreeNode[];
 }
